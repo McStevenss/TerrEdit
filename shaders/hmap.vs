@@ -8,7 +8,8 @@ uniform mat3 uNrmM;
 out vec3 vN;
 out vec3 vW;
 out vec2 vUV;
-void main(){
+void main()
+{
     vec4 wpos = uModel * vec4(aPos,1.0);
     vW = wpos.xyz;
     vN = normalize(uNrmM * aNrm);
