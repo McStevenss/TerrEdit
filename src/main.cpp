@@ -10,7 +10,7 @@
 // - Simple lit shading + optional wireframe
 //
 // Build notes:
-//   - Requires SDL2, GLEW (or GLAD), GLM
+//   - Requires SDL2, GLAD, GLM
 //   - Compile e.g. (Linux):
 //     g++ terrain_editor.cpp -std=c++17 -lSDL2 -lGLEW -lGL -O2 -o terrain_editor
 //   - On Windows, link SDL2, GLEW/GLAD, OpenGL32
@@ -31,7 +31,7 @@
 
 
 // Linux compile:
-//  c++ src/*.cpp -I lib/include -lSDL2 -ldl -o bin/Game -O2 -DNDEBUG
+//  c++ src/*.cpp -I lib/include -lSDL2 -ldl -o bin/TerrEdit -O2 -DNDEBUG
 
 #include <SDL2/SDL.h>
 // #include <GL/glew.h>
@@ -46,41 +46,12 @@
 #include <iostream>
 #include <limits>
 #include <cmath>
+#include <Shader.hpp>
 
 // ------------ Config ------------
 static const int   GRID_SIZE   = 128;          // 128x128 height samples
 static const float TILE_SIZE   = 533.333f;     // WoW ADT ~533.333m, optional
 static const float CELL_SIZE   = TILE_SIZE / (GRID_SIZE - 1);
-
-// ------------ Utility ------------
-static void checkGL(const char* where) {
-    GLenum e = glGetError();
-    if (e != GL_NO_ERROR) {
-        std::cerr << "GL error at " << where << ": 0x" << std::hex << e << std::dec << "\n";
-    }
-}
-
-static GLuint makeShader(GLenum type, const char* src) {
-    GLuint s = glCreateShader(type);
-    glShaderSource(s, 1, &src, nullptr);
-    glCompileShader(s);
-    GLint ok = 0; glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-    if(!ok){ char log[4096]; glGetShaderInfoLog(s,4096,nullptr,log); std::cerr<<"Shader compile error:\n"<<log<<"\n"; }
-    return s;
-}
-
-static GLuint makeProgram(const char* vs, const char* fs) {
-    GLuint p = glCreateProgram();
-    GLuint v = makeShader(GL_VERTEX_SHADER, vs);
-    GLuint f = makeShader(GL_FRAGMENT_SHADER, fs);
-    glAttachShader(p, v);
-    glAttachShader(p, f);
-    glLinkProgram(p);
-    GLint ok = 0; glGetProgramiv(p, GL_LINK_STATUS, &ok);
-    if(!ok){ char log[4096]; glGetProgramInfoLog(p,4096,nullptr,log); std::cerr<<"Program link error:\n"<<log<<"\n"; }
-    glDeleteShader(v); glDeleteShader(f);
-    return p;
-}
 
 // ------------ Heightmap data ------------
 struct HeightMap {
@@ -185,56 +156,10 @@ static void updateTerrainVertices(const HeightMap& hm, TerrainGL& tg) {
     glBufferSubData(GL_ARRAY_BUFFER, 0, verts.size()*sizeof(VertexPNUV), verts.data());
 }
 
-// ------------ Shaders ------------
-static const char* VS = R"GLSL(
-#version 330 core
-layout(location=0) in vec3 aPos;
-layout(location=1) in vec3 aNrm;
-layout(location=2) in vec2 aUV;
-uniform mat4 uMVP;
-uniform mat4 uModel;
-uniform mat3 uNrmM;
-out vec3 vN;
-out vec3 vW;
-out vec2 vUV;
-void main(){
-    vec4 wpos = uModel * vec4(aPos,1.0);
-    vW = wpos.xyz;
-    vN = normalize(uNrmM * aNrm);
-    vUV = aUV;
-    gl_Position = uMVP * vec4(aPos,1.0);
-}
-)GLSL";
-
-static const char* FS = R"GLSL(
-#version 330 core
-in vec3 vN; in vec3 vW; in vec2 vUV;
-out vec4 frag;
-uniform vec3 uLightDir = normalize(vec3(0.3,1.0,0.2));
-uniform vec3 uCamPos;
-void main(){
-    float ndl = max(dot(normalize(vN), normalize(uLightDir)), 0.0);
-    vec3 base = mix(vec3(0.15,0.35,0.15), vec3(0.5,0.4,0.3), vUV.y);
-    vec3 col = base * (0.2 + 0.8*ndl);
-    frag = vec4(col, 1.0);
-}
-)GLSL";
-
-static const char* VS_COLOR = R"GLSL(
-#version 330 core
-layout(location=0) in vec3 aPos;
-uniform mat4 uVP; uniform mat4 uM;
-void main(){ gl_Position = uVP * uM * vec4(aPos,1.0); }
-)GLSL";
-static const char* FS_COLOR = R"GLSL(
-#version 330 core
-out vec4 frag; uniform vec4 uColor; void main(){ frag = uColor; }
-)GLSL";
-
 // ------------ Camera ------------
 struct Camera {
     glm::vec3 pos = glm::vec3(TILE_SIZE*0.5f, 150.0f, -TILE_SIZE*0.2f);
-    float yaw=0.0f, pitch=-0.35f; // radians
+    float yaw=1.00f, pitch=-0.35f; // radians
     float fov=60.0f; float nearP=0.1f, farP=2000.0f;
 
     glm::mat4 view() const {
@@ -364,8 +289,9 @@ int main(int argc, char** argv){
 
     glEnable(GL_DEPTH_TEST);
 
-    GLuint prog = makeProgram(VS, FS);
-    GLuint progC = makeProgram(VS_COLOR, FS_COLOR);
+    
+    Shader heightMapShader("shaders/hmap.vs","shaders/hmap.fs");
+    Shader heightMapColorShader("shaders/hmap_color.vs","shaders/hmap_color.fs");
 
     HeightMap hm; TerrainGL tg; buildTerrainMesh(hm, tg);
 
@@ -393,8 +319,8 @@ int main(int argc, char** argv){
             if(e.type==SDL_KEYDOWN){
                 if(e.key.keysym.sym==SDLK_ESCAPE) running=false;
                 if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=true;
-                if(e.key.keysym.sym==SDLK_LEFTBRACKET) brush.strength = glm::max(0.1f, brush.strength*0.9f);
-                if(e.key.keysym.sym==SDLK_RIGHTBRACKET) brush.strength = glm::min(10.0f, brush.strength*1.1f);
+                if(e.key.keysym.sym==SDLK_b) brush.strength = glm::max(0.1f, brush.strength*0.9f);
+                if(e.key.keysym.sym==SDLK_v) brush.strength = glm::min(10.0f, brush.strength*1.1f);
                 if(e.key.keysym.sym==SDLK_f){ wire=!wire; }
                 if(e.key.keysym.sym==SDLK_r){ std::fill(hm.h.begin(), hm.h.end(), 0.0f); updateTerrainVertices(hm, tg); }
                 if(e.key.keysym.sym==SDLK_F5){ saveHMap("tile.hmap", hm); std::cout<<"Saved tile.hmap\n"; }
@@ -450,11 +376,12 @@ int main(int argc, char** argv){
         glm::mat3 NrmM = glm::mat3(1.0f);
 
         glPolygonMode(GL_FRONT_AND_BACK, wire?GL_LINE:GL_FILL);
-        glUseProgram(prog);
-        glUniformMatrix4fv(glGetUniformLocation(prog,"uMVP"),1,GL_FALSE,glm::value_ptr(MVP));
-        glUniformMatrix4fv(glGetUniformLocation(prog,"uModel"),1,GL_FALSE,glm::value_ptr(M));
-        glUniformMatrix3fv(glGetUniformLocation(prog,"uNrmM"),1,GL_FALSE,glm::value_ptr(NrmM));
-        glUniform3fv(glGetUniformLocation(prog,"uCamPos"),1,glm::value_ptr(cam.pos));
+        heightMapShader.use();
+        heightMapShader.setMat4("uMVP", MVP);
+        heightMapShader.setMat4("uModel", M);
+        heightMapShader.setMat3("uNrmM", NrmM);
+        heightMapShader.setVec3("uCamPos", cam.pos);
+        
 
         glBindVertexArray(tg.vao);
         glDrawElements(GL_TRIANGLES, tg.indexCount, GL_UNSIGNED_INT, 0);
@@ -469,10 +396,14 @@ int main(int argc, char** argv){
             glBufferData(GL_ARRAY_BUFFER, ring.size()*sizeof(glm::vec3), ring.data(), GL_DYNAMIC_DRAW);
 
             glm::mat4 Mring = glm::translate(glm::mat4(1.0f), glm::vec3(hit.x, hit.y + 0.05f, hit.z));
-            glUseProgram(progC);
-            glm::mat4 VP = P*V; glUniformMatrix4fv(glGetUniformLocation(progC,"uVP"),1,GL_FALSE,glm::value_ptr(VP));
-            glUniformMatrix4fv(glGetUniformLocation(progC,"uM"),1,GL_FALSE,glm::value_ptr(Mring));
-            glUniform4f(glGetUniformLocation(progC,"uColor"), 0.0f,0.0f,0.0f,1.0f);
+            glm::mat4 VP = P*V; 
+
+            heightMapColorShader.use();
+            heightMapColorShader.setMat4("uVP", VP);
+            heightMapColorShader.setMat4("uM", Mring);
+            heightMapColorShader.setVec4("uColor", glm::vec4(0.0f,0.0f,0.0f,1.0f));
+            
+
             glBindVertexArray(ringVAO);
             glDrawArrays(GL_LINE_LOOP, 0, (GLint)ring.size());
             glBindVertexArray(0);
