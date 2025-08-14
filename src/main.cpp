@@ -53,7 +53,7 @@ static const int   GRID_SIZE   = 128;          // 128x128 height samples
 static const float TILE_SIZE   = 533.333f;     // WoW ADT ~533.333m, optional
 static const float CELL_SIZE   = TILE_SIZE / (GRID_SIZE - 1);
 bool FLATSHADE = false;
-
+bool noFallOff = false;
 // ------------ Heightmap data ------------
 struct HeightMap {
     int size = GRID_SIZE;
@@ -150,7 +150,8 @@ static void updateTerrainVertices(const HeightMap& hm, TerrainGL& tg) {
     std::vector<VertexPNUV> verts; verts.resize(hm.size*hm.size);
     for(int z=0; z<hm.size; ++z){
         for(int x=0; x<hm.size; ++x){
-            VertexPNUV v{}; v.p = glm::vec3(x*hm.cell, hm.at(x,z), z*hm.cell);
+            VertexPNUV v{};
+            v.p = glm::vec3(x*hm.cell, hm.at(x,z), z*hm.cell);
             v.n = hm.normalAt(x,z);
             v.uv = glm::vec2(x/(float)(hm.size-1), z/(float)(hm.size-1));
             verts[z*hm.size + x] = v;
@@ -224,7 +225,9 @@ static void applyBrush(HeightMap& hm, const Brush& b, const glm::vec3& hit, bool
                 float wx = x*hm.cell, wz = z*hm.cell;
                 float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
                 if(dist > b.radius) continue;
+
                 float falloff = 0.5f*(cosf(3.14159f * dist / b.radius) + 1.0f); // smooth falloff
+                if (noFallOff) falloff = 1.0f;
                 hm.at(x,z) += sgn * b.strength * falloff * 0.1f; // scale step
             }
         }
@@ -308,7 +311,7 @@ int main(int argc, char** argv){
     
 
     glEnable(GL_DEPTH_TEST);
-
+    glCullFace(GL_BACK);
     
     Shader heightMapShader("shaders/hmap.vs","shaders/hmap.fs", "shaders/hmap.g");
     Shader heightMapColorShader("shaders/hmap_color.vs","shaders/hmap_color.fs");
@@ -340,6 +343,7 @@ int main(int argc, char** argv){
             if(e.type==SDL_MOUSEWHEEL){ if(e.wheel.y>0) brush.radius*=1.1f; if(e.wheel.y<0) brush.radius/=1.1f; brush.radius = glm::clamp(brush.radius, 1.0f, 100.0f); }
             if(e.type==SDL_KEYDOWN){
                 if(e.key.keysym.sym==SDLK_ESCAPE) running=false;
+                if(e.key.keysym.sym==SDLK_LCTRL) noFallOff=true;
                 if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=true;
                 if(e.key.keysym.sym==SDLK_TAB) FLATSHADE=!FLATSHADE;
                 if(e.key.keysym.sym==SDLK_b) brush.strength = glm::max(0.1f, brush.strength*0.9f);
@@ -350,6 +354,7 @@ int main(int argc, char** argv){
                 if(e.key.keysym.sym==SDLK_F9){ if(loadHMap("tile.hmap", hm)){ updateTerrainVertices(hm, tg); std::cout<<"Loaded tile.hmap\n"; } }
             }
             if(e.type==SDL_KEYUP){ if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=false; }
+            if(e.type==SDL_KEYUP){ if(e.key.keysym.sym==SDLK_LCTRL) noFallOff=false; }
         }
 
         // --- Timing ---
