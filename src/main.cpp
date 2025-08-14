@@ -52,6 +52,7 @@
 static const int   GRID_SIZE   = 128;          // 128x128 height samples
 static const float TILE_SIZE   = 533.333f;     // WoW ADT ~533.333m, optional
 static const float CELL_SIZE   = TILE_SIZE / (GRID_SIZE - 1);
+bool FLATSHADE = false;
 
 // ------------ Heightmap data ------------
 struct HeightMap {
@@ -98,7 +99,7 @@ struct TerrainGL {
     void destroy(){ if(ibo)glDeleteBuffers(1,&ibo); if(vbo)glDeleteBuffers(1,&vbo); if(vao)glDeleteVertexArrays(1,&vao); vao=vbo=ibo=0; indexCount=0; }
 };
 
-static void buildTerrainMesh(const HeightMap& hm, TerrainGL& tg) {
+static void buildTerrainMesh(const HeightMap& hm, TerrainGL& tg, bool flatShading = false) {
     std::vector<VertexPNUV> verts; verts.resize(hm.size*hm.size);
     for(int z=0; z<hm.size; ++z){
         for(int x=0; x<hm.size; ++x){
@@ -141,6 +142,9 @@ static void buildTerrainMesh(const HeightMap& hm, TerrainGL& tg) {
     tg.indexCount = (GLsizei)idx.size();
 }
 
+
+
+
 static void updateTerrainVertices(const HeightMap& hm, TerrainGL& tg) {
     // Update VBO positions and normals only (same topology)
     std::vector<VertexPNUV> verts; verts.resize(hm.size*hm.size);
@@ -175,12 +179,14 @@ struct Camera {
 };
 
 // ------------ Ray picking into heightmap ------------
-static bool rayHeightmapIntersect(const HeightMap& hm, const glm::vec3& ro, const glm::vec3& rd, float maxDist, glm::vec3& outHit) {
+static bool rayHeightmapIntersect(const HeightMap& hm, const glm::vec3& rayOrigin, const glm::vec3& rayDistance, float maxDist, glm::vec3& outHit) {
     // Simple ray marching along ray; test when ray.y <= height(wx,wz)
-    float t = 0.0f; float step = hm.cell * 0.5f; // step ~ half cell
+    float t = 0.0f; 
+    float step = hm.cell * 0.5f; // step ~ half cell
     glm::vec3 p;
+
     for(int i=0; i<2048 && t <= maxDist; ++i){
-        p = ro + rd * t;
+        p = rayOrigin + rayDistance * t;
         if(p.x < 0 || p.z < 0 || p.x > (hm.size-1)*hm.cell || p.z > (hm.size-1)*hm.cell){ t += step; continue; }
         float h = hm.sampleHeight(p.x, p.z);
         if(p.y <= h){
@@ -188,11 +194,12 @@ static bool rayHeightmapIntersect(const HeightMap& hm, const glm::vec3& ro, cons
             float t0 = t - step, t1 = t;
             for(int j=0;j<8;++j){
                 float tm = 0.5f*(t0+t1);
-                glm::vec3 pm = ro + rd*tm;
+                glm::vec3 pm = rayOrigin + rayDistance*tm;
                 float hmH = hm.sampleHeight(pm.x, pm.z);
-                if(pm.y > hmH) t0 = tm; else t1 = tm;
+                if(pm.y > hmH) t0 = tm;
+                else t1 = tm;
             }
-            outHit = ro + rd * t1; outHit.y = hm.sampleHeight(outHit.x, outHit.z);
+            outHit = rayOrigin + rayDistance * t1; outHit.y = hm.sampleHeight(outHit.x, outHit.z);
             return true;
         }
         t += step;
@@ -221,16 +228,29 @@ static void applyBrush(HeightMap& hm, const Brush& b, const glm::vec3& hit, bool
                 hm.at(x,z) += sgn * b.strength * falloff * 0.1f; // scale step
             }
         }
-    } else { // Smooth
+    } 
+    else { // Smooth
         for(int dz=-rCells; dz<=rCells; ++dz){
             for(int dx=-rCells; dx<=rCells; ++dx){
-                int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
+                int x = cx + dx;
+                int z = cz + dz; 
+                if(!hm.inBounds(x,z)) continue;
+
                 float wx = x*hm.cell, wz = z*hm.cell;
                 float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
+                
                 if(dist > b.radius) continue;
                 // average of neighbors
                 float sum=0; int cnt=0;
-                for(int oz=-1; oz<=1; ++oz){ for(int ox=-1; ox<=1; ++ox){ int xx=x+ox, zz=z+oz; if(hm.inBounds(xx,zz)){ sum+=hm.at(xx,zz); ++cnt; } }}
+                for(int oz=-1; oz<=1; ++oz){
+                    for(int ox=-1; ox<=1; ++ox){
+                        int xx=x+ox, zz=z+oz;
+                        if(hm.inBounds(xx,zz))
+                        {
+                            sum+=hm.at(xx,zz); ++cnt; 
+                        } 
+                    }
+                }
                 float avg = sum / (float)cnt;
                 hm.at(x,z) = glm::mix(hm.at(x,z), avg, glm::clamp(b.strength*0.2f, 0.0f, 1.0f));
             }
@@ -285,15 +305,17 @@ int main(int argc, char** argv){
     }
     SDL_GL_SetSwapInterval(1);
 
-    // glewInit();
+    
 
     glEnable(GL_DEPTH_TEST);
 
     
-    Shader heightMapShader("shaders/hmap.vs","shaders/hmap.fs");
+    Shader heightMapShader("shaders/hmap.vs","shaders/hmap.fs", "shaders/hmap.g");
     Shader heightMapColorShader("shaders/hmap_color.vs","shaders/hmap_color.fs");
 
-    HeightMap hm; TerrainGL tg; buildTerrainMesh(hm, tg);
+    HeightMap hm;
+    TerrainGL tg;
+    buildTerrainMesh(hm, tg);
 
     // simple unit circle VBO for brush ring
     GLuint ringVBO=0, ringVAO=0; std::vector<glm::vec3> ringVerts; buildCircle(ringVerts, 1.0f);
@@ -319,6 +341,7 @@ int main(int argc, char** argv){
             if(e.type==SDL_KEYDOWN){
                 if(e.key.keysym.sym==SDLK_ESCAPE) running=false;
                 if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=true;
+                if(e.key.keysym.sym==SDLK_TAB) FLATSHADE=!FLATSHADE;
                 if(e.key.keysym.sym==SDLK_b) brush.strength = glm::max(0.1f, brush.strength*0.9f);
                 if(e.key.keysym.sym==SDLK_v) brush.strength = glm::min(10.0f, brush.strength*1.1f);
                 if(e.key.keysym.sym==SDLK_f){ wire=!wire; }
@@ -378,6 +401,7 @@ int main(int argc, char** argv){
         glPolygonMode(GL_FRONT_AND_BACK, wire?GL_LINE:GL_FILL);
         heightMapShader.use();
         heightMapShader.setMat4("uMVP", MVP);
+        heightMapShader.setBool("uFlatShading", FLATSHADE);
         heightMapShader.setMat4("uModel", M);
         heightMapShader.setMat3("uNrmM", NrmM);
         heightMapShader.setVec3("uCamPos", cam.pos);
