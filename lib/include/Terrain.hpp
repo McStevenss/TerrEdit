@@ -49,7 +49,7 @@ struct HeightMap {
             }
 };
 
-//We remove any padding here so we can successfully load it straight from memory into RAM and it "autoparses" it to the correct HMapHeader!
+//We remove any padding here that the compiler might add, so we can successfully load it straight from memory into RAM and it "autoparses" it to the correct HMapHeader!
 #pragma pack(push,1)
 struct HMapHeader { char magic[4]; uint32_t size; float cell; };
 #pragma pack(pop)

@@ -1,4 +1,7 @@
 #include "Terrain.hpp"
+#include <chrono>
+#include <iostream>
+
 
 void Terrain::buildMesh() {
     std::vector<VertexPNUV> verts(hm.size * hm.size);
@@ -234,6 +237,8 @@ bool Terrain::saveHMap(const std::string& path){
 
 //Comments so i remember what is done here.
 bool Terrain::loadHMap(const std::string& path){
+    auto start = std::chrono::high_resolution_clock::now();
+    
     //Open binary file
     std::ifstream f(path, std::ios::binary);
     if(!f) return false;
@@ -241,16 +246,25 @@ bool Terrain::loadHMap(const std::string& path){
     //Get the header for this fileformat
     HMapHeader hdr;
     f.read((char*)&hdr, sizeof(hdr));
-
+    
     //Verify it is a valid file and format through the magic header
     if(!(hdr.magic[0]=='H'&&hdr.magic[1]=='M'&&hdr.magic[2]=='P'&&hdr.magic[3]=='1')) return false;
-
+    
     //Verify that the size is correct
     if((int)hdr.size != hm.size){ std::cerr<<"Mismatched size in hmap.\n"; return false; }
-
+    
     //Resize height array
     hm.h.resize(hm.size*hm.size);
     f.read((char*)hm.h.data(), hm.h.size()*sizeof(float));
     dirty=true;
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    // Duration in microseconds
+    auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    std::cout << "[Terrain] Heightmap loaded in " << duration_ms << " ms (" 
+              << duration_us << " μs)." << std::endl;
+ 
     return true;
 }
