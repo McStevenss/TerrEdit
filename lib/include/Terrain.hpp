@@ -54,7 +54,7 @@ struct HMapHeader { char magic[4]; uint32_t size; float cell; };
 #pragma pack(pop)
 
 enum class BrushMode { RaiseLower, Smooth };
-struct Brush { float radius=6.0f; float strength=1.0f; BrushMode mode=BrushMode::RaiseLower; };
+struct Brush { float radius=6.0f; bool Falloff=true; float strength=1.0f; BrushMode mode=BrushMode::RaiseLower; };
 
 class Terrain {
 

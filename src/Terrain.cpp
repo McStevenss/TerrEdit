@@ -71,7 +71,9 @@ void Terrain::updateMeshIfDirty() {
 void Terrain::render() {
     updateMeshIfDirty();
     glBindVertexArray(mesh.vao);
+
     glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr);
+    
     glBindVertexArray(0);
 }
 
@@ -95,12 +97,16 @@ void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
                 float wx = x*hm.cell, wz = z*hm.cell;
                 float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
                 if(dist > b.radius) continue;
+
                 float falloff = 0.5f*(cosf(3.14159f * dist / b.radius) + 1.0f); // smooth falloff
+                if (!b.Falloff){falloff = 1.0f;}
                 hm.at(x,z) += sgn * b.strength * falloff * 0.1f; // scale step
                 dirty=true;
             }
         }
-    } else { // Smooth
+    }
+    else if(b.mode == BrushMode::Smooth)
+    { // Smooth
         for(int dz=-rCells; dz<=rCells; ++dz){
             for(int dx=-rCells; dx<=rCells; ++dx){
                 int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
