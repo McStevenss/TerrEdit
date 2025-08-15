@@ -74,14 +74,14 @@ class Terrain {
         // GPU mesh
         void buildMesh();
         void updateMeshIfDirty();
-        void render();
         void resetHeightMap();
-
-
+        void Render(bool wire=false);
+        
         // Brush editing
         void applyBrush(const Brush& b, const glm::vec3& hit, bool lower=false);
-
+        
     private:
+        void drawMesh();
      
         struct TerrainGL {
             GLuint vao=0, vbo=0, ibo=0; GLsizei indexCount=0;

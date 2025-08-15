@@ -89,6 +89,7 @@ void Engine::Start()
         // Begin the Info panel window
         ImGui::Begin("Info panel");
             ImGui::Text("Text test");
+        ImGui::End();
 
         
         terrain->updateMeshIfDirty();
@@ -99,23 +100,20 @@ void Engine::Start()
         glm::mat4 Model(1.0f);
         glm::mat4 MVP = Projection * View * Model;
         glm::mat3 NrmM = glm::mat3(1.0f);
-              
-        glPolygonMode(GL_FRONT_AND_BACK, wire?GL_LINE:GL_FILL);
-          
+            
         heightMapShader->use();
         heightMapShader->setMat4("uMVP", MVP);
         heightMapShader->setBool("uFlatShading", flatshade);
         heightMapShader->setMat4("uModel", Model);
         heightMapShader->setMat3("uNrmM", NrmM);
         heightMapShader->setVec3("uCamPos", cam.pos);
-        terrain->render();
+        terrain->Render(wire);
 
         // Draw brush ring at hit position
         if(hasHit){
             std::vector<glm::vec3> ring; buildCircle(ring, brush.radius, 96);
             // update ring VBO with scaled circle at hit.y
             for(auto& v : ring){ v.y = 0.0f; }
-            ImGui::Text("Text test2");
 
             glBindBuffer(GL_ARRAY_BUFFER, ringVBO);
             glBufferData(GL_ARRAY_BUFFER, ring.size()*sizeof(glm::vec3), ring.data(), GL_DYNAMIC_DRAW);
@@ -135,7 +133,6 @@ void Engine::Start()
         }
 
 
-        ImGui::End();
 
           // Render ImGui
         ImGui::Render();

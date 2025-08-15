@@ -68,7 +68,39 @@ void Terrain::updateMeshIfDirty() {
     dirty = false;
 }
 
-void Terrain::render() {
+void Terrain::Render(bool wire){
+    if (wire) {
+        // 1) Depth pre-pass (fill, no color)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        drawMesh();
+
+        // 2) Wire pass
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+
+        glEnable(GL_POLYGON_OFFSET_LINE);
+        glPolygonOffset(-1.0f, -1.0f);
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDepthFunc(GL_LEQUAL);
+        drawMesh();
+
+        // restore
+        glDisable(GL_POLYGON_OFFSET_LINE);
+        glDisable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glDepthFunc(GL_LESS);
+    } else {
+        // Just a filled render
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        drawMesh();
+    }
+}
+
+void Terrain::drawMesh() {
+
     updateMeshIfDirty();
     glBindVertexArray(mesh.vao);
 
