@@ -69,14 +69,16 @@ void Terrain::updateMeshIfDirty() {
 }
 
 void Terrain::render() {
-
-
-
-
     updateMeshIfDirty();
     glBindVertexArray(mesh.vao);
     glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr);
     glBindVertexArray(0);
+}
+
+void Terrain::resetHeightMap()
+{
+    std::fill(hm.h.begin(), hm.h.end(), 0.0f); 
+    dirty=true; 
 }
 
 void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
@@ -114,4 +116,51 @@ void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
             }
         }
     }
+}
+
+
+bool Terrain::rayHeightmapIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDistance, float maxDist, glm::vec3& outHit) {
+    // Simple ray marching along ray; test when ray.y <= height(wx,wz)
+    float t = 0.0f; 
+    float step = hm.cell * 0.5f; // step ~ half cell
+    glm::vec3 p;
+
+    for(int i=0; i<2048 && t <= maxDist; ++i){
+        p = rayOrigin + rayDistance * t;
+        if(p.x < 0 || p.z < 0 || p.x > (hm.size-1)*hm.cell || p.z > (hm.size-1)*hm.cell){ t += step; continue; }
+        float h = hm.sampleHeight(p.x, p.z);
+        if(p.y <= h){
+            // refine with binary search
+            float t0 = t - step, t1 = t;
+            for(int j=0;j<8;++j){
+                float tm = 0.5f*(t0+t1);
+                glm::vec3 pm = rayOrigin + rayDistance*tm;
+                float hmH = hm.sampleHeight(pm.x, pm.z);
+                if(pm.y > hmH) t0 = tm;
+                else t1 = tm;
+            }
+            outHit = rayOrigin + rayDistance * t1; outHit.y = hm.sampleHeight(outHit.x, outHit.z);
+            return true;
+        }
+        t += step;
+    }
+    return false;
+}
+
+bool Terrain::saveHMap(const std::string& path){
+    std::ofstream f(path, std::ios::binary); if(!f) return false;
+    HMapHeader hdr; hdr.magic[0]='H';hdr.magic[1]='M';hdr.magic[2]='P';hdr.magic[3]='1'; hdr.size=hm.size; hdr.cell=hm.cell;
+    f.write((char*)&hdr, sizeof(hdr));
+    f.write((char*)hm.h.data(), hm.h.size()*sizeof(float));
+    return true;
+}
+bool Terrain::loadHMap(const std::string& path){
+    std::ifstream f(path, std::ios::binary); if(!f) return false;
+    HMapHeader hdr; f.read((char*)&hdr, sizeof(hdr));
+    if(!(hdr.magic[0]=='H'&&hdr.magic[1]=='M'&&hdr.magic[2]=='P'&&hdr.magic[3]=='1')) return false;
+    if((int)hdr.size != hm.size){ std::cerr<<"Mismatched size in hmap.\n"; return false; }
+    hm.h.resize(hm.size*hm.size);
+    f.read((char*)hm.h.data(), hm.h.size()*sizeof(float));
+    dirty=true;
+    return true;
 }
