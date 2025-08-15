@@ -64,7 +64,6 @@ class Engine {
         bool shift=false;
         bool flatshade=false;
         bool projectCircle=true;
-
         float EditorWindowWidth;
         float EditorWindowHeight;
 

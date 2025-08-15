@@ -100,8 +100,8 @@ void Engine::Start()
             
             // --- Brush apply ---
             if(hasHit){
-                if(lmb){ brush.mode = BrushMode::RaiseLower; terrain->applyBrush(brush, hit, shift);}
-                if(mmb){ brush.mode = BrushMode::Smooth; terrain->applyBrush(brush, hit, false);}
+                if(lmb){terrain->applyBrush(brush, hit, shift);}
+                if(mmb){terrain->applyBrush(brush, hit, false);}
             }
         }
 
@@ -140,7 +140,7 @@ void Engine::Start()
                     // v.y += terrain->getHeightAt(v.x,v.z);
                     float worldX = v.x + hit.x;
                     float worldZ = v.z + hit.z;
-                    v.y = terrain->getHeightAt(worldX, worldZ) + 0.15f; // offset slightly above terrain
+                    v.y = terrain->getHeightAt(worldX, worldZ) + terrain->circleOffset; // offset slightly above terrain
                     
                     // update vertex to world-space XZ
                     v.x = worldX;
@@ -212,6 +212,9 @@ void Engine::HandleInput(float dt)
         if(e.type==SDL_MOUSEWHEEL){ if(e.wheel.y>0) brush.radius*=1.1f; if(e.wheel.y<0) brush.radius/=1.1f; brush.radius = glm::clamp(brush.radius, 1.0f, 100.0f); }
         if(e.type==SDL_KEYDOWN){
             if(e.key.keysym.sym==SDLK_ESCAPE) running=false;
+            if(e.key.keysym.sym==SDLK_1) {brush.mode = BrushMode::RaiseLower;};
+            if(e.key.keysym.sym==SDLK_2) {brush.mode = BrushMode::Flat;};
+            if(e.key.keysym.sym==SDLK_3) {brush.mode = BrushMode::Smooth;};
             if(e.key.keysym.sym==SDLK_LCTRL) brush.Falloff=false;
             if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=true;
             if(e.key.keysym.sym==SDLK_TAB) flatshade=!flatshade;
@@ -347,7 +350,11 @@ ImVec2 Engine::RenderGUI()
     ImGui::SeparatorText("Brush Settings");
     ImGui::SliderFloat("Brush Radius", &brush.radius, 0.1f, 100.0f);
     ImGui::SliderFloat("Brush Strength", &brush.strength, 0.01f, 10.0f);
-
+    const char* brushModes[] = {"Raise/Lower", "Smooth", "Flat"};
+    int currentBrushMode = static_cast<int>(brush.mode); // keep track of selection
+    if (ImGui::Combo("Brush Mode", &currentBrushMode, brushModes, IM_ARRAYSIZE(brushModes))) {
+        brush.mode = static_cast<BrushMode>(currentBrushMode);
+    }
     //--------------------------------------------------------------------
     ImGui::SeparatorText("Keybinds");
     ImGui::Text("[F] Wireframe toggle");

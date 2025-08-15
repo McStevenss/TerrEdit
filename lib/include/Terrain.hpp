@@ -54,8 +54,13 @@ struct HeightMap {
 struct HMapHeader { char magic[4]; uint32_t size; float cell; };
 #pragma pack(pop)
 
-enum class BrushMode { RaiseLower, Smooth };
-struct Brush { float radius=6.0f; bool Falloff=true; float strength=1.0f; BrushMode mode=BrushMode::RaiseLower; };
+enum class BrushMode { RaiseLower, Smooth, Flat};
+struct Brush {
+    float radius=6.0f;
+    bool Falloff=true;
+    float strength=1.0f;
+    BrushMode mode=BrushMode::RaiseLower;
+};
 
 class Terrain {
 
@@ -82,6 +87,8 @@ class Terrain {
         // Brush editing
         void applyBrush(const Brush& b, const glm::vec3& hit, bool lower=false);
         
+        float circleOffset = 0.15f;
+
     private:
         void drawMesh();
      

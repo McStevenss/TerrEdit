@@ -157,29 +157,39 @@ void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
             }
         }
     }
+    else if(b.mode == BrushMode::Flat){
+        for(int dz=-rCells; dz<=rCells; ++dz){
+            for(int dx=-rCells; dx<=rCells; ++dx){
+                int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
+                float wx = x*hm.cell, wz = z*hm.cell;
+                float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
+                if(dist > b.radius) continue;
+                float currentHeight = getHeightAt(hit.x, hit.z);
+                
+                float step = 0.1f; // deltaTime if you want frame-independent
+                if(lower) {
+                    // Gradually reduce height
+                    if(currentHeight > 0.0f) {           // optional: clamp to 0 or some min
+                        hm.at(x,z) = currentHeight - step;
+                    }
+                } 
+                else if(!b.Falloff){
+                    if(currentHeight > 0.0f) {           // optional: clamp to 0 or some min
+                        hm.at(x,z) = currentHeight + step;
+                    }
+                }
+                else {
+                    // Flatten normally
+                    hm.at(x,z) = currentHeight;
+                }
+                
+                dirty=true;
+            }
+        }
+    }
 }
 
 float Terrain::getHeightAt(float x, float z) const {
-    // int ix = (int)floor(x);
-    // int iz = (int)floor(z);
-    // float fx = x - ix;
-    // float fz = z - iz;
-
-    // // clamp
-    // if(!inBounds(ix, iz)) return 0.0f;
-    // if(!inBounds(ix+1, iz+1)) return heightAt(ix, iz);
-
-    // // bilinear interpolation
-    // float h00 = heightAt(ix, iz);
-    // float h10 = heightAt(ix+1, iz);
-    // float h01 = heightAt(ix, iz+1);
-    // float h11 = heightAt(ix+1, iz+1);
-
-    // float h0 = h00*(1-fx) + h10*fx;
-    // float h1 = h01*(1-fx) + h11*fx;
-
-    // return h0*(1-fz) + h1*fz;
-
     return hm.sampleHeight(x,z);
 }
 bool Terrain::rayHeightmapIntersect(const glm::vec3 &rayOrigin, const glm::vec3 &rayDistance, float maxDist, glm::vec3 &outHit)
