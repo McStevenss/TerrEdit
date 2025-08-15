@@ -208,18 +208,47 @@ bool Terrain::rayHeightmapIntersect(const glm::vec3 &rayOrigin, const glm::vec3 
     return false;
 }
 
+//Comments so i remember what is done here.
 bool Terrain::saveHMap(const std::string& path){
-    std::ofstream f(path, std::ios::binary); if(!f) return false;
-    HMapHeader hdr; hdr.magic[0]='H';hdr.magic[1]='M';hdr.magic[2]='P';hdr.magic[3]='1'; hdr.size=hm.size; hdr.cell=hm.cell;
+    //Open binary file
+    std::ofstream f(path, std::ios::binary);
+    if(!f) return false;
+    
+
+    //Get the designed header for this custom heightmap file
+    HMapHeader hdr;
+    
+    //Write fileheader (arbitrary) as HMP1 to show what file it is
+    hdr.magic[0]='H';hdr.magic[1]='M';hdr.magic[2]='P';hdr.magic[3]='1';
+    
+    //Writes what size the heightmap is and how big the cells are 
+    hdr.size=hm.size; hdr.cell=hm.cell;
+    
+    //First write header
     f.write((char*)&hdr, sizeof(hdr));
+
+    //Just RAW dump the heightmap data at the rest
     f.write((char*)hm.h.data(), hm.h.size()*sizeof(float));
     return true;
 }
+
+//Comments so i remember what is done here.
 bool Terrain::loadHMap(const std::string& path){
-    std::ifstream f(path, std::ios::binary); if(!f) return false;
-    HMapHeader hdr; f.read((char*)&hdr, sizeof(hdr));
+    //Open binary file
+    std::ifstream f(path, std::ios::binary);
+    if(!f) return false;
+    
+    //Get the header for this fileformat
+    HMapHeader hdr;
+    f.read((char*)&hdr, sizeof(hdr));
+
+    //Verify it is a valid file and format through the magic header
     if(!(hdr.magic[0]=='H'&&hdr.magic[1]=='M'&&hdr.magic[2]=='P'&&hdr.magic[3]=='1')) return false;
+
+    //Verify that the size is correct
     if((int)hdr.size != hm.size){ std::cerr<<"Mismatched size in hmap.\n"; return false; }
+
+    //Resize height array
     hm.h.resize(hm.size*hm.size);
     f.read((char*)hm.h.data(), hm.h.size()*sizeof(float));
     dirty=true;

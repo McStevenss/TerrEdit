@@ -336,18 +336,19 @@ ImVec2 Engine::RenderGUI()
                  ImGuiWindowFlags_NoResize |
                  ImGuiWindowFlags_NoCollapse);
 
-    // Example buttons
+    //--------------------------------------------------------------------
     ImGui::SeparatorText("Status");
     if(ImGui::Button("Toggle Wireframe")) { wire = !wire; }
     ImGui::Checkbox("Flat Shading", &flatshade);
     ImGui::Checkbox("Project Circle", &projectCircle);
 
 
+    //--------------------------------------------------------------------
     ImGui::SeparatorText("Brush Settings");
     ImGui::SliderFloat("Brush Radius", &brush.radius, 0.1f, 100.0f);
     ImGui::SliderFloat("Brush Strength", &brush.strength, 0.01f, 10.0f);
 
-
+    //--------------------------------------------------------------------
     ImGui::SeparatorText("Keybinds");
     ImGui::Text("[F] Wireframe toggle");
     ImGui::Text("[E/Q] Up/Down");
