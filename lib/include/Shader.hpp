@@ -26,7 +26,6 @@ public:
         m_TessControlPath = tessControlPath;
         m_TessEvalPath = tessEvalPath;
 
-        
         loadShader(); // main loading logic
     }
 

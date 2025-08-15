@@ -63,6 +63,7 @@ class Terrain {
         ~Terrain(){ mesh.destroy(); }
         // CPU access
         float heightAt(int x,int z) const { return hm.at(x,z); }
+        float getHeightAt(float x, float y) const;
         glm::vec3 normalAt(int x,int z) const { return hm.normalAt(x,z); }
         bool inBounds(int x,int z) const { return hm.inBounds(x,z); }
         bool rayHeightmapIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDistance, float maxDist, glm::vec3& outHit);
