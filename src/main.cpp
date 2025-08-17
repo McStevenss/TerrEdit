@@ -1,3 +1,9 @@
+//For windows needs to be defined first of all
+#define SDL_MAIN_HANDLED
+// #define SDL_VIDEO_DRIVER_X11 1
+#define SDL_VIDEO_DRIVER_WINDOWS 1
+
+
 // Mini WoW-like Terrain Editor
 // SDL2 + OpenGL (Core) + GLM
 // Features:
@@ -29,16 +35,20 @@
 //   struct Header { char magic[4] = "HMP1"; uint32_t size; float cellSize; }
 //   followed by size*size floats (row-major)
 
-
 // Linux compile:
 // c++ src/*.cpp lib/build/*.o -I lib/include -lSDL2 -ldl -o bin/TerrEdit -O2 -DNDEBUG
 
+// Windows compile:
+//g++ src/*.cpp lib/include/imgui/*.cpp -I lib/include/ -o bin/TerrEdit.exe -lSDL2 -lopengl32 -lgdi32 -lwinmm -luser32 -mwindows -O2 -DNDEBUG
 #include "Engine.h"
 
-int main(int argc, char** argv){
+// int main(int argc, char** argv){
+int main(){
     Engine engine;
 
     engine.Start();
 
     return 0;
 }
+
+
