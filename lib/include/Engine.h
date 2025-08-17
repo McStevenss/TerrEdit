@@ -13,7 +13,8 @@
 #include <limits>
 #include <cmath>
 #include <Shader.hpp>
-#include "Terrain.hpp"
+#include "TerrainChunk.hpp"
+#include "TerrainMap.h"
 #include "Camera.hpp"
 //ImGui + SDL
 #include <SDL2/SDL.h>
@@ -43,7 +44,8 @@ class Engine {
         ImVec2 RenderGUI();
         Shader* heightMapShader;
         Shader* heightMapColorShader;
-        Terrain* terrain;
+        // TerrainChunk* terrainChunk;
+        TerrainMap* terrainMap;
         Brush brush;
 
         int ScreenWidth=1920;

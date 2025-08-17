@@ -8,8 +8,8 @@ Engine::Engine()
 
     heightMapShader = new Shader("shaders/hmap.vs","shaders/hmap.fs", "shaders/hmap.g");
     heightMapColorShader = new Shader("shaders/hmap_color.vs","shaders/hmap_color.fs");
-    terrain = new Terrain(GRID_SIZE, CELL_SIZE);
-    terrain->buildMesh();
+    terrainMap = new TerrainMap(2,2,GRID_SIZE, CELL_SIZE);
+    terrainMap->build();
     buildCircle(ringVerts, 1.0f);
     GenCircleGL();
 
@@ -84,7 +84,7 @@ void Engine::Start()
         glm::mat4 invVP = glm::inverse(VP);
         bool hasHit = false;
         glm::vec3 hit;
-
+        
 
         if(insideImage){
 
@@ -95,19 +95,39 @@ void Engine::Start()
 
 
             glm::vec3 ro = glm::vec3(p0); glm::vec3 rd = glm::normalize(glm::vec3(p1-p0));
+            // hasHit = terrainChunk->rayHeightmapIntersect(ro, rd, 4000.0f, hit);
  
-            hasHit = terrain->rayHeightmapIntersect(ro, rd, 4000.0f, hit);
-            
+            hasHit = false;
+            float closestT = 1e9f;
+            for (auto& chunk : terrainMap->GetChunks()) 
+            {
+                glm::vec3 localRo = ro - chunk->position;  // move ray origin into chunk space
+                glm::vec3 tmpHitLocal;
+
+                if (chunk->rayHeightmapIntersect(localRo, rd, 4000.0f, tmpHitLocal)) {
+                    glm::vec3 tmpHitWorld = tmpHitLocal + chunk->position; // convert back to world
+                    float t = glm::length(tmpHitWorld - ro);
+                    if (t < closestT) {
+                        closestT = t;
+                        hit = tmpHitWorld;
+                        hasHit = true;
+                    }
+                }
+            }
+
+
             // --- Brush apply ---
             if(hasHit){
-                if(lmb){terrain->applyBrush(brush, hit, shift);}
-                if(mmb){terrain->applyBrush(brush, hit, false);}
+                // if(lmb){terrainChunk->applyBrush(brush, hit, shift);}
+                // if(mmb){terrainChunk->applyBrush(brush, hit, false);}
+                if (lmb) { terrainMap->applyBrush(brush, hit, shift); }
             }
         }
 
 
 
-        terrain->updateMeshIfDirty();
+        // terrainChunk->updateMeshIfDirty();
+        terrainMap->updateDirtyChunks();
         // --- Render ---
         glClearColor(0.52f,0.75f,0.95f,1);
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -122,7 +142,8 @@ void Engine::Start()
         heightMapShader->setMat4("uModel", Model);
         heightMapShader->setMat3("uNrmM", NrmM);
         heightMapShader->setVec3("uCamPos", cam.pos);
-        terrain->Render(wire);
+        // terrainChunk->Render(wire);
+        terrainMap->render(wire);
 
         // Draw brush ring at hit position
         if(hasHit){
@@ -140,7 +161,14 @@ void Engine::Start()
                     // v.y += terrain->getHeightAt(v.x,v.z);
                     float worldX = v.x + hit.x;
                     float worldZ = v.z + hit.z;
-                    v.y = terrain->getHeightAt(worldX, worldZ) + terrain->circleOffset; // offset slightly above terrain
+                    TerrainChunk* tempChunk = terrainMap->getChunkAt(glm::vec3(worldX,0.0f,worldZ));
+                    if (tempChunk) {
+                        // Compute local coordinates relative to the chunk
+                        glm::vec3 local = glm::vec3(worldX, 0.0f, worldZ) - tempChunk->position;
+                        v.y = tempChunk->getHeightAt(local.x, local.z) + tempChunk->circleOffset;
+                    } else {
+                        v.y = 0.0f;
+                    }
                     
                     // update vertex to world-space XZ
                     v.x = worldX;
@@ -218,12 +246,14 @@ void Engine::HandleInput(float dt)
             if(e.key.keysym.sym==SDLK_LCTRL) brush.Falloff=false;
             if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=true;
             if(e.key.keysym.sym==SDLK_TAB) flatshade=!flatshade;
-            if(e.key.keysym.sym==SDLK_b) brush.strength = glm::max(0.1f, brush.strength*0.9f);
-            if(e.key.keysym.sym==SDLK_v) brush.strength = glm::min(10.0f, brush.strength*1.1f);
+            if(e.key.keysym.sym==SDLK_v) brush.strength = glm::max(0.1f, brush.strength*0.9f);
+            if(e.key.keysym.sym==SDLK_b) brush.strength = glm::min(10.0f, brush.strength*1.1f);
             if(e.key.keysym.sym==SDLK_f){ wire=!wire; }
-            if(e.key.keysym.sym==SDLK_r){ terrain->resetHeightMap();}
-            if(e.key.keysym.sym==SDLK_F5){ terrain->saveHMap("tile.hmap"); std::cout<<"Saved tile.hmap\n"; }
-            if(e.key.keysym.sym==SDLK_F9){ terrain->loadHMap("tile.hmap"); std::cout<<"Loaded tile.hmap\n"; } 
+            // if(e.key.keysym.sym==SDLK_r){ terrainChunk->resetHeightMap();}
+            // if(e.key.keysym.sym==SDLK_F5){ terrainChunk->saveHMap("tile.hmap"); std::cout<<"Saved tile.hmap\n"; }
+            if(e.key.keysym.sym==SDLK_F5){ terrainMap->save("saved");}
+            if(e.key.keysym.sym==SDLK_F9){ terrainMap->load("saved");} 
+            // if(e.key.keysym.sym==SDLK_F9){ terrainChunk->loadHMap("tile.hmap"); std::cout<<"Loaded tile.hmap\n"; } 
         }
         
         if(e.type==SDL_KEYUP){ if(e.key.keysym.sym==SDLK_LSHIFT || e.key.keysym.sym==SDLK_RSHIFT) shift=false; }
@@ -320,7 +350,7 @@ ImVec2 Engine::RenderGUI()
 
     // add image
     ImGui::GetWindowDrawList()->AddImage(
-        (void*)texture_id,
+        (ImTextureID)(intptr_t)texture_id,
         imgPos,
         ImVec2(imgPos.x + EditorWindowWidth, imgPos.y + EditorWindowHeight),
         ImVec2(0,1),
@@ -361,6 +391,7 @@ ImVec2 Engine::RenderGUI()
     ImGui::Text("[E/Q] Up/Down");
     ImGui::Text("[TAB] Smooth shade toggle");
     ImGui::Text("[SCRLWHL] Brush radius");
+    ImGui::Text("[v/b] Brush strength");
     ImGui::Text("[MB1] Raise terrain");
     ImGui::Text("[Shift + MB1] Lower terrain");
     ImGui::Text("[MMB] Smooth terrain");

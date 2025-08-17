@@ -51,7 +51,13 @@ struct HeightMap {
 
 //We remove any padding here that the compiler might add, so we can successfully load it straight from memory into RAM and it "autoparses" it to the correct HMapHeader!
 #pragma pack(push,1)
-struct HMapHeader { char magic[4]; uint32_t size; float cell; };
+struct HMapHeader {
+    char magic[4];
+    uint32_t size;
+    float cell; 
+    uint32_t gridX;
+    uint32_t gridZ;
+};
 #pragma pack(pop)
 
 enum class BrushMode { RaiseLower, Smooth, Flat};
@@ -62,18 +68,18 @@ struct Brush {
     BrushMode mode=BrushMode::RaiseLower;
 };
 
-class Terrain {
+class TerrainChunk {
 
     public:
-        Terrain(int gridSize=128, float cellSize=1.0f) : hm(gridSize, cellSize) {}
-        ~Terrain(){ mesh.destroy(); }
+        TerrainChunk(int gridSize=128, float cellSize=1.0f) : hm(gridSize, cellSize) {}
+        ~TerrainChunk(){ mesh.destroy(); }
         // CPU access
         float heightAt(int x,int z) const { return hm.at(x,z); }
         float getHeightAt(float x, float y) const;
         glm::vec3 normalAt(int x,int z) const { return hm.normalAt(x,z); }
         bool inBounds(int x,int z) const { return hm.inBounds(x,z); }
         bool rayHeightmapIntersect(const glm::vec3& rayOrigin, const glm::vec3& rayDistance, float maxDist, glm::vec3& outHit);
-        
+        bool contains(float wx, float wz);
         bool saveHMap(const std::string& path);
         bool loadHMap(const std::string& path);
         
@@ -88,6 +94,12 @@ class Terrain {
         void applyBrush(const Brush& b, const glm::vec3& hit, bool lower=false);
         
         float circleOffset = 0.15f;
+        HeightMap hm;
+
+        glm::vec3 position;
+        int gridX;
+        int gridZ;
+
 
     private:
         void drawMesh();
@@ -102,7 +114,6 @@ class Terrain {
             }
         };
 
-        HeightMap hm;
         TerrainGL mesh;
         bool dirty = true;
 

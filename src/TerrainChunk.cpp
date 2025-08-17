@@ -1,20 +1,20 @@
-#include "Terrain.hpp"
+#include "TerrainChunk.hpp"
 #include <chrono>
 #include <iostream>
 
 
-void Terrain::buildMesh() {
+void TerrainChunk::buildMesh() {
     std::vector<VertexPNUV> verts(hm.size * hm.size);
 
-    // Build vertices
     for(int z = 0; z < hm.size; ++z) {
         for(int x = 0; x < hm.size; ++x) {
-            VertexPNUV& v = verts[z*hm.size + x];
-            v.p = glm::vec3(x*hm.cell, hm.at(x,z), z*hm.cell);
-            v.n = hm.normalAt(x,z);
-            v.uv = glm::vec2(x / float(hm.size-1), z / float(hm.size-1));
+        VertexPNUV& v = verts[z*hm.size + x];
+        v.p = glm::vec3(position.x + x*hm.cell, hm.at(x,z), position.z + z*hm.cell);
+        v.n = hm.normalAt(x,z);
+        v.uv = glm::vec2(x / float(hm.size-1), z / float(hm.size-1));
         }
     }
+
 
     // Build indices
     std::vector<uint32_t> idx;
@@ -53,14 +53,15 @@ void Terrain::buildMesh() {
     dirty = false;
 }
 
-void Terrain::updateMeshIfDirty() {
+
+void TerrainChunk::updateMeshIfDirty() {
     if(!dirty) return;
 
     std::vector<VertexPNUV> verts(hm.size * hm.size);
     for(int z = 0; z < hm.size; ++z) {
         for(int x = 0; x < hm.size; ++x) {
             VertexPNUV& v = verts[z*hm.size + x];
-            v.p = glm::vec3(x*hm.cell, hm.at(x,z), z*hm.cell);
+            v.p = glm::vec3(position.x + x*hm.cell, hm.at(x,z), position.z + z*hm.cell);
             v.n = hm.normalAt(x,z);
             v.uv = glm::vec2(x / float(hm.size-1), z / float(hm.size-1));
         }
@@ -71,7 +72,7 @@ void Terrain::updateMeshIfDirty() {
     dirty = false;
 }
 
-void Terrain::Render(bool wire){
+void TerrainChunk::Render(bool wire){
     if (wire) {
         // 1) Depth pre-pass (fill, no color)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -102,9 +103,9 @@ void Terrain::Render(bool wire){
     }
 }
 
-void Terrain::drawMesh() {
+void TerrainChunk::drawMesh() {
 
-    updateMeshIfDirty();
+    // updateMeshIfDirty();
     glBindVertexArray(mesh.vao);
 
     glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr);
@@ -112,60 +113,59 @@ void Terrain::drawMesh() {
     glBindVertexArray(0);
 }
 
-void Terrain::resetHeightMap()
+void TerrainChunk::resetHeightMap()
 {
     std::fill(hm.h.begin(), hm.h.end(), 0.0f); 
     dirty=true; 
 }
 
-void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
+void TerrainChunk::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
 {
+
     int cx = (int)roundf(hit.x / hm.cell);
     int cz = (int)roundf(hit.z / hm.cell);
+
     int rCells = (int)ceilf(b.radius / hm.cell);
+    // int rCells = (int)ceilf(b.radius / hm.cell);
     float sgn = lower ? -1.0f : 1.0f;
 
-    if(b.mode == BrushMode::RaiseLower){
-        for(int dz=-rCells; dz<=rCells; ++dz){
-            for(int dx=-rCells; dx<=rCells; ++dx){
-                int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
-                float wx = x*hm.cell, wz = z*hm.cell;
-                float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
-                if(dist > b.radius) continue;
+    for(int dz=-rCells; dz<=rCells; ++dz){
+        int z = cz + dz;
+        if(z < 0 || z >= hm.size) continue;   // bounds check
 
-                float falloff = 0.5f*(cosf(3.14159f * dist / b.radius) + 1.0f); // smooth falloff
-                if (!b.Falloff){falloff = 1.0f;}
-                hm.at(x,z) += sgn * b.strength * falloff * 0.1f; // scale step
-                dirty=true;
+        for(int dx=-rCells; dx<=rCells; ++dx){
+            int x = cx + dx;
+            if(x < 0 || x >= hm.size) continue; // bounds check
+            float wx = x * hm.cell;   // still chunk-local
+            float wz = z * hm.cell;   // chunk-local
+            float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
+            if(dist > b.radius) continue;
+
+
+            if(b.mode == BrushMode::RaiseLower)
+            {
+                float falloff = b.Falloff ? 0.5f*(cosf(3.14159f*dist/b.radius)+1.0f) : 1.0f;
+                hm.at(x,z) += sgn * b.strength * falloff * 0.1f;
+                dirty = true;
             }
-        }
-    }
-    else if(b.mode == BrushMode::Smooth)
-    { // Smooth
-        for(int dz=-rCells; dz<=rCells; ++dz){
-            for(int dx=-rCells; dx<=rCells; ++dx){
-                int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
-                float wx = x*hm.cell, wz = z*hm.cell;
-                float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
-                if(dist > b.radius) continue;
-                // average of neighbors
+            else if(b.mode == BrushMode::Smooth)
+            {
                 float sum=0; int cnt=0;
-                for(int oz=-1; oz<=1; ++oz){ for(int ox=-1; ox<=1; ++ox){ int xx=x+ox, zz=z+oz; if(hm.inBounds(xx,zz)){ sum+=hm.at(xx,zz); ++cnt; } }}
+                for(int oz=-1; oz<=1; ++oz){
+                     for(int ox=-1; ox<=1; ++ox){
+                        int xx=x+ox, zz=z+oz;
+                        if(hm.inBounds(xx,zz)){
+                            sum+=hm.at(xx,zz); ++cnt; 
+                        } 
+                    }
+                }
                 float avg = sum / (float)cnt;
                 hm.at(x,z) = glm::mix(hm.at(x,z), avg, glm::clamp(b.strength*0.2f, 0.0f, 1.0f));
                 dirty=true;
             }
-        }
-    }
-    else if(b.mode == BrushMode::Flat){
-        for(int dz=-rCells; dz<=rCells; ++dz){
-            for(int dx=-rCells; dx<=rCells; ++dx){
-                int x = cx + dx, z = cz + dz; if(!hm.inBounds(x,z)) continue;
-                float wx = x*hm.cell, wz = z*hm.cell;
-                float dist = glm::length(glm::vec2(wx - hit.x, wz - hit.z));
-                if(dist > b.radius) continue;
-                float currentHeight = getHeightAt(hit.x, hit.z);
-                
+            else if(b.mode == BrushMode::Flat)
+            {
+                float currentHeight = getHeightAt(hit.x, hit.z); 
                 float step = 0.1f; // deltaTime if you want frame-independent
                 if(lower) {
                     // Gradually reduce height
@@ -189,11 +189,14 @@ void Terrain::applyBrush(const Brush &b, const glm::vec3 &hit, bool lower)
     }
 }
 
-float Terrain::getHeightAt(float x, float z) const {
+float TerrainChunk::getHeightAt(float x, float z) const {
     return hm.sampleHeight(x,z);
 }
-bool Terrain::rayHeightmapIntersect(const glm::vec3 &rayOrigin, const glm::vec3 &rayDistance, float maxDist, glm::vec3 &outHit)
+
+
+bool TerrainChunk::rayHeightmapIntersect(const glm::vec3 &rayOrigin, const glm::vec3 &rayDistance, float maxDist, glm::vec3 &outHit)
 {
+
     // Simple ray marching along ray; test when ray.y <= height(wx,wz)
     float t = 0.0f; 
     float step = hm.cell * 0.5f; // step ~ half cell
@@ -221,8 +224,9 @@ bool Terrain::rayHeightmapIntersect(const glm::vec3 &rayOrigin, const glm::vec3 
     return false;
 }
 
+
 //Comments so i remember what is done here.
-bool Terrain::saveHMap(const std::string& path){
+bool TerrainChunk::saveHMap(const std::string& path){
     //Open binary file
     std::ofstream f(path, std::ios::binary);
     if(!f) return false;
@@ -235,7 +239,10 @@ bool Terrain::saveHMap(const std::string& path){
     hdr.magic[0]='H';hdr.magic[1]='M';hdr.magic[2]='P';hdr.magic[3]='1';
     
     //Writes what size the heightmap is and how big the cells are 
-    hdr.size=hm.size; hdr.cell=hm.cell;
+    hdr.size=hm.size;
+    hdr.cell=hm.cell;
+    hdr.gridX = gridX;
+    hdr.gridZ = gridZ;
     
     //First write header
     f.write((char*)&hdr, sizeof(hdr));
@@ -246,7 +253,7 @@ bool Terrain::saveHMap(const std::string& path){
 }
 
 //Comments so i remember what is done here.
-bool Terrain::loadHMap(const std::string& path){
+bool TerrainChunk::loadHMap(const std::string& path){
     auto start = std::chrono::high_resolution_clock::now();
     
     //Open binary file
@@ -256,16 +263,24 @@ bool Terrain::loadHMap(const std::string& path){
     //Get the header for this fileformat
     HMapHeader hdr;
     f.read((char*)&hdr, sizeof(hdr));
-    
+
     //Verify it is a valid file and format through the magic header
     if(!(hdr.magic[0]=='H'&&hdr.magic[1]=='M'&&hdr.magic[2]=='P'&&hdr.magic[3]=='1')) return false;
     
     //Verify that the size is correct
     if((int)hdr.size != hm.size){ std::cerr<<"Mismatched size in hmap.\n"; return false; }
     
+    gridX = (int)hdr.gridX;
+    gridZ = (int)hdr.gridZ;
+
+    position.x = gridX * (hm.size - 1) * hm.cell;
+    position.z = gridZ * (hm.size - 1) * hm.cell;
+    position.y = 0.0f; // default
+
     //Resize height array
     hm.h.resize(hm.size*hm.size);
     f.read((char*)hm.h.data(), hm.h.size()*sizeof(float));
+    
     dirty=true;
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -273,8 +288,28 @@ bool Terrain::loadHMap(const std::string& path){
     // Duration in microseconds
     auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    std::cout << "[Terrain] Heightmap loaded in " << duration_ms << " ms (" 
+    std::cout << "[TerrainChunk] Heightmap loaded in " << duration_ms << " ms (" 
               << duration_us << " μs)." << std::endl;
  
+    buildMesh();
+    return true;
+}
+
+
+bool TerrainChunk::contains(float wx, float wz){
+
+    float localX = wx - position.x;
+    float localZ = wz - position.z;
+
+
+    float gx = localX / hm.cell; // grid space
+    float gz = localZ / hm.cell;
+    int x0 = (int)floorf(gx);
+    int z0 = (int)floorf(gz);
+    int x1 = x0 + 1;
+    int z1 = z0 + 1;
+    if(x0 < 0 || z0 < 0 || x1 >= hm.size || z1 >= hm.size) return false;
+
+
     return true;
 }
