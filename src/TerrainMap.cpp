@@ -133,7 +133,7 @@ void TerrainMap::load(const std::string& folderPath) {
 
     // Clear current chunks
     chunks.clear();
-    
+    int numErrors = 0;
 
     // Iterate over all .hmp files
     for (auto& entry : fs::directory_iterator(folderPath)) {
@@ -144,6 +144,7 @@ void TerrainMap::load(const std::string& folderPath) {
         auto chunk = std::make_unique<TerrainChunk>(chunkSize, cellSize);
         if (!chunk->loadHMap(entry.path().string())) {
             std::cerr << "Failed to load chunk: " << entry.path() << std::endl;
+            numErrors++;
         }
 
         chunks.push_back(std::move(chunk));
@@ -161,10 +162,14 @@ void TerrainMap::load(const std::string& folderPath) {
         chunksZ = maxZ + 1;
     }
 
-    build();
-
-    updateDirtyChunks();
-    std::cout << "TerrainMap loaded successfully from " << folderPath << std::endl;
+    if(numErrors > 0){
+        std::cout << "TerrainMap failed to load " << numErrors << " chunks from: " << folderPath << std::endl;
+    }
+    else {
+        build();
+        updateDirtyChunks();
+        std::cout << "TerrainMap loaded successfully from " << folderPath << std::endl;
+    }
 }
 // Optionally, update chunksX and chunksZ based on loaded data
 // Update chunksX/Z

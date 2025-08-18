@@ -71,7 +71,7 @@ class Engine {
 
         int mx=0,my=0;
         // ------------ Config ------------
-        const int   GRID_SIZE   = 128;          // 128x128 height samples
+        const int   GRID_SIZE   = 256;          // 128x128 height samples
         const float TILE_SIZE   = 533.333f;     // WoW ADT ~533.333m, optional
         const float CELL_SIZE   = TILE_SIZE / (GRID_SIZE - 1);
 
